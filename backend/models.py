@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date
 from sqlalchemy.orm import relationship
 from database import Base
+from datetime import date
 
 class User(Base):
     __tablename__ = "users"
@@ -16,7 +17,16 @@ class Habit(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, index=True)
     description = Column(String, default="")
-    completed = Column(Boolean, default=False)
     user_id = Column(Integer, ForeignKey("users.id"))
 
     owner = relationship("User", back_populates="habits")
+    completions = relationship("HabitCompletion", back_populates="habit", cascade="all, delete-orphan")
+
+class HabitCompletion(Base):
+    __tablename__ = "habit_completions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    habit_id = Column(Integer, ForeignKey("habits.id"))
+    completion_date = Column(Date, default=date.today)
+
+    habit = relationship("Habit", back_populates="completions")
