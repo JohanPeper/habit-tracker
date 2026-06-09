@@ -1,0 +1,26 @@
+# Зависимости React (ОСНОВНОЕ)
+/frontend/node_modules
+
+# Кэш, база данных и окружение Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+.venv
+env/
+venv/
+*.sqlite3
+habits.db
+
+# Логи и файлы, создаваемые ОС
+*.log
+.DS_Store
+Thumbs.db
+
+# Папки со сборкой и IDE
+/frontend/build
+.idea/
+.vscode/
+*.swp
+*.swo
