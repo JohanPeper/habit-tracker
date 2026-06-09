@@ -3,10 +3,18 @@ import axios from 'axios';
 
 const API = 'http://localhost:8000';
 
+// Настройка axios: добавляем токен в заголовки, если он есть
+axios.interceptors.request.use(config => {
+  const token = localStorage.getItem('access_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
-  const [users, setUsers] = useState([]);
-  const [userName, setUserName] = useState('');
   const [habits, setHabits] = useState([]);
   const [newHabit, setNewHabit] = useState({ title: '', description: '' });
   const [selectedHabitForCalendar, setSelectedHabitForCalendar] = useState(null);
@@ -15,50 +23,86 @@ function App() {
   const [editTitle, setEditTitle] = useState('');
   const [editDesc, setEditDesc] = useState('');
 
+  // Auth state
+  const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
+  const [authUsername, setAuthUsername] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+
+  // Проверяем токен при загрузке
   useEffect(() => {
-    axios.get(`${API}/users/`).then(res => setUsers(res.data));
+    const token = localStorage.getItem('access_token');
+    if (token) {
+      // Пытаемся получить данные пользователя (можно сделать отдельный эндпоинт /me, но пока загрузим привычки)
+      setIsAuthenticated(true);
+      fetchHabits();
+    }
   }, []);
 
-  const loginOrRegister = async () => {
-    if (!userName.trim()) return;
+  const fetchHabits = async () => {
     try {
-      const existing = users.find(u => u.name === userName);
-      if (existing) {
-        setUser(existing);
-      } else {
-        const res = await axios.post(`${API}/users/`, { name: userName });
-        setUser(res.data);
-        setUsers([...users, res.data]);
-      }
+      const res = await axios.get(`${API}/habits/`);
+      setHabits(res.data);
+      const datesMap = {};
+      res.data.forEach(habit => {
+        if (habit.completions) {
+          datesMap[habit.id] = new Set(habit.completions.map(c => c.completion_date));
+        } else {
+          datesMap[habit.id] = new Set();
+        }
+      });
+      setCompletionDates(datesMap);
     } catch (err) {
-      alert('Ошибка: ' + err.response?.data?.detail || err.message);
+      console.error(err);
+      if (err.response?.status === 401) {
+        logout();
+      }
     }
   };
 
-  useEffect(() => {
-    if (user) {
-      axios.get(`${API}/habits/`, { params: { user_id: user.id } })
-        .then(res => {
-          setHabits(res.data);
-          const datesMap = {};
-          res.data.forEach(habit => {
-            if (habit.completions) {
-              datesMap[habit.id] = new Set(habit.completions.map(c => c.completion_date));
-            } else {
-              datesMap[habit.id] = new Set();
-            }
-          });
-          setCompletionDates(datesMap);
-        });
+  const login = async () => {
+    setAuthError('');
+    try {
+      const formData = new URLSearchParams();
+      formData.append('username', authUsername);
+      formData.append('password', authPassword);
+      const res = await axios.post(`${API}/auth/login`, formData, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      });
+      localStorage.setItem('access_token', res.data.access_token);
+      setIsAuthenticated(true);
+      setUser({ username: authUsername });
+      fetchHabits();
+    } catch (err) {
+      setAuthError(err.response?.data?.detail || 'Ошибка входа');
     }
-  }, [user]);
+  };
+
+  const register = async () => {
+    setAuthError('');
+    try {
+      await axios.post(`${API}/auth/register`, {
+        username: authUsername,
+        password: authPassword
+      });
+      // После регистрации сразу логиним
+      await login();
+    } catch (err) {
+      setAuthError(err.response?.data?.detail || 'Ошибка регистрации');
+    }
+  };
+
+  const logout = () => {
+    localStorage.removeItem('access_token');
+    setIsAuthenticated(false);
+    setUser(null);
+    setHabits([]);
+  };
 
   const addHabit = async () => {
     if (!newHabit.title.trim()) return;
     try {
-      const res = await axios.post(`${API}/habits/`, newHabit, {
-        params: { user_id: user.id }
-      });
+      const res = await axios.post(`${API}/habits/`, newHabit);
       setHabits([...habits, res.data]);
       setCompletionDates({ ...completionDates, [res.data.id]: new Set() });
       setNewHabit({ title: '', description: '' });
@@ -146,7 +190,6 @@ function App() {
     await toggleCompletion(habitId, todayStr);
   };
 
-  // --- Расчёт процента выполнения за текущий месяц ---
   const getMonthProgress = (habitId) => {
     const today = new Date();
     const year = today.getFullYear();
@@ -215,39 +258,47 @@ function App() {
     );
   };
 
-  if (!user) {
+  // Форма аутентификации
+  if (!isAuthenticated) {
     return (
       <div className="container" style={{ maxWidth: 500, textAlign: 'center' }}>
         <h1>✨ Habit Tracker</h1>
-        <p style={{ color: '#475569', marginBottom: 24 }}>Войдите или создайте профиль</p>
+        <p style={{ marginBottom: 24 }}>{authMode === 'login' ? 'Вход' : 'Регистрация'}</p>
         <input
-          value={userName}
-          onChange={e => setUserName(e.target.value)}
-          placeholder="Ваше имя"
-          onKeyPress={e => e.key === 'Enter' && loginOrRegister()}
-          style={{ marginBottom: 16 }}
+          type="text"
+          placeholder="Имя пользователя"
+          value={authUsername}
+          onChange={e => setAuthUsername(e.target.value)}
+          style={{ marginBottom: 12, width: '100%' }}
         />
-        <button onClick={loginOrRegister}>Продолжить</button>
-        {users.length > 0 && (
-          <div style={{ marginTop: 32, textAlign: 'left' }}>
-            <h3>👥 Участники</h3>
-            <ul style={{ listStyle: 'none', padding: 0 }}>
-              {users.map(u => <li key={u.id} style={{ padding: '4px 0' }}>• {u.name}</li>)}
-            </ul>
-          </div>
-        )}
+        <input
+          type="password"
+          placeholder="Пароль"
+          value={authPassword}
+          onChange={e => setAuthPassword(e.target.value)}
+          style={{ marginBottom: 12, width: '100%' }}
+          onKeyPress={e => e.key === 'Enter' && (authMode === 'login' ? login() : register())}
+        />
+        {authError && <div style={{ color: 'red', marginBottom: 12 }}>{authError}</div>}
+        <button onClick={authMode === 'login' ? login : register} style={{ width: '100%', marginBottom: 12 }}>
+          {authMode === 'login' ? 'Войти' : 'Зарегистрироваться'}
+        </button>
+        <button onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')} style={{ background: '#e2e8f0', color: '#1e293b' }}>
+          {authMode === 'login' ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
+        </button>
       </div>
     );
   }
 
+  // Основное приложение
   return (
     <div className="container">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1>📋 Привычки</h1>
-          <p style={{ color: '#475569' }}>Пользователь: <strong>{user.name}</strong></p>
+          <p style={{ color: '#475569' }}>Пользователь: <strong>{user?.username}</strong></p>
         </div>
-        <button onClick={() => setUser(null)} style={{ background: '#e2e8f0', color: '#1e293b' }}>Сменить</button>
+        <button onClick={logout} style={{ background: '#e2e8f0', color: '#1e293b' }}>Выйти</button>
       </div>
 
       <div style={{ background: '#f8fafc', borderRadius: 24, padding: 20, marginBottom: 28 }}>
@@ -257,7 +308,7 @@ function App() {
             value={newHabit.title}
             onChange={e => setNewHabit({ ...newHabit, title: e.target.value })}
             onKeyPress={e => e.key === 'Enter' && addHabit()}
-            placeholder="Название (например, «Зарядка»)"
+            placeholder="Название"
           />
         </div>
         <div className="form-group">
@@ -265,7 +316,7 @@ function App() {
             value={newHabit.description}
             onChange={e => setNewHabit({ ...newHabit, description: e.target.value })}
             onKeyPress={e => e.key === 'Enter' && addHabit()}
-            placeholder="Описание (необязательно)"
+            placeholder="Описание"
           />
         </div>
         <button onClick={addHabit} style={{ width: '100%' }}>➕ Добавить привычку</button>
@@ -273,9 +324,7 @@ function App() {
 
       <div>
         <h2>📌 Мои привычки</h2>
-        {habits.length === 0 && (
-          <p style={{ textAlign: 'center', color: '#64748b', padding: '40px 0' }}>Пока нет привычек. Добавьте первую!</p>
-        )}
+        {habits.length === 0 && <p style={{ textAlign: 'center', color: '#64748b', padding: '40px 0' }}>Нет привычек. Добавьте первую!</p>}
         {habits.map(habit => {
           const streak = calculateStreak(habit.id);
           const isEditing = editingHabitId === habit.id;
@@ -284,21 +333,11 @@ function App() {
               <div className="habit-content" style={{ flex: 1 }}>
                 {isEditing ? (
                   <div>
-                    <input
-                      value={editTitle}
-                      onChange={e => setEditTitle(e.target.value)}
-                      placeholder="Название"
-                      style={{ width: '100%', marginBottom: 8 }}
-                    />
-                    <input
-                      value={editDesc}
-                      onChange={e => setEditDesc(e.target.value)}
-                      placeholder="Описание"
-                      style={{ width: '100%', marginBottom: 8 }}
-                    />
+                    <input value={editTitle} onChange={e => setEditTitle(e.target.value)} placeholder="Название" style={{ width: '100%', marginBottom: 8 }} />
+                    <input value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="Описание" style={{ width: '100%', marginBottom: 8 }} />
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={() => updateHabitDetails(habit.id)} style={{ background: '#4caf50', padding: '4px 12px' }}>💾 Сохранить</button>
-                      <button onClick={cancelEdit} style={{ background: '#9e9e9e', padding: '4px 12px' }}>❌ Отмена</button>
+                      <button onClick={() => updateHabitDetails(habit.id)} style={{ background: '#4caf50' }}>Сохранить</button>
+                      <button onClick={cancelEdit} style={{ background: '#9e9e9e' }}>Отмена</button>
                     </div>
                   </div>
                 ) : (
@@ -311,8 +350,8 @@ function App() {
               </div>
               {!isEditing && (
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={() => startEdit(habit)} style={{ background: '#ff9800', padding: '6px 12px' }}>✏️</button>
-                  <button onClick={() => markToday(habit.id)} style={{ background: '#4caf50', padding: '6px 12px' }}>✅ Сегодня</button>
+                  <button onClick={() => startEdit(habit)} style={{ background: '#ff9800' }}>✏️</button>
+                  <button onClick={() => markToday(habit.id)} style={{ background: '#4caf50' }}>✅ Сегодня</button>
                   <button onClick={() => setSelectedHabitForCalendar(habit.id)} style={{ background: '#2196f3' }}>📅</button>
                   <button onClick={() => deleteHabit(habit.id)} className="delete-btn">🗑</button>
                 </div>
@@ -322,7 +361,6 @@ function App() {
         })}
       </div>
 
-      {/* Блок статистики за текущий месяц */}
       {habits.length > 0 && (
         <div style={{ marginTop: 40, padding: '20px', background: '#f1f5f9', borderRadius: 24 }}>
           <h2>📊 Статистика за этот месяц</h2>
@@ -335,13 +373,7 @@ function App() {
                   <span>{completedCount} / {totalDays} ({percent}%)</span>
                 </div>
                 <div style={{ background: '#e2e8f0', borderRadius: 20, overflow: 'hidden' }}>
-                  <div style={{
-                    width: `${percent}%`,
-                    background: 'linear-gradient(90deg, #667eea, #764ba2)',
-                    height: '12px',
-                    borderRadius: 20,
-                    transition: 'width 0.3s'
-                  }} />
+                  <div style={{ width: `${percent}%`, background: 'linear-gradient(90deg, #667eea, #764ba2)', height: '12px', borderRadius: 20 }} />
                 </div>
               </div>
             );

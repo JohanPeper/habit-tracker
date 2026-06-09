@@ -7,7 +7,8 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True)
+    username = Column(String, unique=True, index=True)  # вместо name
+    hashed_password = Column(String)
 
     habits = relationship("Habit", back_populates="owner")
 

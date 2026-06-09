@@ -5,17 +5,17 @@ from datetime import date
 
 # ----- Пользователи -----
 class UserBase(BaseModel):
-    name: str
+    username: str
 
 class UserCreate(UserBase):
-    pass
+    password: str
 
 class User(UserBase):
     id: int
     class Config:
-        from_attributes = True   # замена orm_mode
+        from_attributes = True
 
-# ----- Завершения привычек (дни) -----
+# ----- Завершения привычек -----
 class HabitCompletionBase(BaseModel):
     completion_date: date
 
@@ -43,6 +43,6 @@ class HabitUpdate(BaseModel):
 class Habit(HabitBase):
     id: int
     user_id: int
-    completions: List[HabitCompletion] = []   # теперь список завершений
+    completions: List[HabitCompletion] = []
     class Config:
         from_attributes = True

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import SessionLocal
+from auth import get_current_user
 import models, schemas
 from datetime import date, timedelta
 
@@ -13,31 +14,27 @@ def get_db():
     finally:
         db.close()
 
-# Создать привычку
+# Создать привычку (user берётся из токена)
 @router.post("/", response_model=schemas.Habit)
-def create_habit(habit: schemas.HabitCreate, user_id: int, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    new_habit = models.Habit(title=habit.title, description=habit.description, user_id=user_id)
+def create_habit(habit: schemas.HabitCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    new_habit = models.Habit(title=habit.title, description=habit.description, user_id=current_user.id)
     db.add(new_habit)
     db.commit()
     db.refresh(new_habit)
     return new_habit
 
-# Получить все привычки пользователя (с их завершениями)
+# Получить все привычки текущего пользователя
 @router.get("/", response_model=list[schemas.Habit])
-def get_habits(user_id: int, db: Session = Depends(get_db)):
-    habits = db.query(models.Habit).filter(models.Habit.user_id == user_id).all()
-    # Принудительно загружаем completions для каждого
+def get_habits(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    habits = db.query(models.Habit).filter(models.Habit.user_id == current_user.id).all()
     for h in habits:
         db.refresh(h)
     return habits
 
-# Отметить выполнение за конкретную дату (по умолчанию сегодня)
+# Отметить выполнение
 @router.post("/{habit_id}/complete")
-def complete_habit(habit_id: int, completion_date: date = None, db: Session = Depends(get_db)):
-    habit = db.query(models.Habit).filter(models.Habit.id == habit_id).first()
+def complete_habit(habit_id: int, completion_date: date = None, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    habit = db.query(models.Habit).filter(models.Habit.id == habit_id, models.Habit.user_id == current_user.id).first()
     if not habit:
         raise HTTPException(status_code=404, detail="Habit not found")
     if completion_date is None:
@@ -53,10 +50,10 @@ def complete_habit(habit_id: int, completion_date: date = None, db: Session = De
     db.commit()
     return {"message": "Completed"}
 
-# Снять отметку за дату
+# Снять отметку
 @router.delete("/{habit_id}/complete")
-def uncomplete_habit(habit_id: int, completion_date: date = None, db: Session = Depends(get_db)):
-    habit = db.query(models.Habit).filter(models.Habit.id == habit_id).first()
+def uncomplete_habit(habit_id: int, completion_date: date = None, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    habit = db.query(models.Habit).filter(models.Habit.id == habit_id, models.Habit.user_id == current_user.id).first()
     if not habit:
         raise HTTPException(status_code=404, detail="Habit not found")
     if completion_date is None:
@@ -71,10 +68,10 @@ def uncomplete_habit(habit_id: int, completion_date: date = None, db: Session = 
     db.commit()
     return {"message": "Uncompleted"}
 
-# Получить количество дней подряд (streak)
+# Streak
 @router.get("/{habit_id}/streak")
-def get_streak(habit_id: int, db: Session = Depends(get_db)):
-    habit = db.query(models.Habit).filter(models.Habit.id == habit_id).first()
+def get_streak(habit_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    habit = db.query(models.Habit).filter(models.Habit.id == habit_id, models.Habit.user_id == current_user.id).first()
     if not habit:
         raise HTTPException(status_code=404, detail="Habit not found")
     completions = db.query(models.HabitCompletion).filter(
@@ -92,20 +89,10 @@ def get_streak(habit_id: int, db: Session = Depends(get_db)):
             break
     return {"streak": streak}
 
-# Удалить привычку полностью
-@router.delete("/{habit_id}")
-def delete_habit(habit_id: int, db: Session = Depends(get_db)):
-    habit = db.query(models.Habit).filter(models.Habit.id == habit_id).first()
-    if not habit:
-        raise HTTPException(status_code=404, detail="Habit not found")
-    db.delete(habit)
-    db.commit()
-    return {"ok": True}
-    
-    # Обновить привычку (название, описание)
+# Обновить привычку
 @router.put("/{habit_id}", response_model=schemas.Habit)
-def update_habit(habit_id: int, habit_update: schemas.HabitUpdate, db: Session = Depends(get_db)):
-    habit = db.query(models.Habit).filter(models.Habit.id == habit_id).first()
+def update_habit(habit_id: int, habit_update: schemas.HabitUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    habit = db.query(models.Habit).filter(models.Habit.id == habit_id, models.Habit.user_id == current_user.id).first()
     if not habit:
         raise HTTPException(status_code=404, detail="Habit not found")
     if habit_update.title is not None:
@@ -115,3 +102,13 @@ def update_habit(habit_id: int, habit_update: schemas.HabitUpdate, db: Session =
     db.commit()
     db.refresh(habit)
     return habit
+
+# Удалить привычку
+@router.delete("/{habit_id}")
+def delete_habit(habit_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    habit = db.query(models.Habit).filter(models.Habit.id == habit_id, models.Habit.user_id == current_user.id).first()
+    if not habit:
+        raise HTTPException(status_code=404, detail="Habit not found")
+    db.delete(habit)
+    db.commit()
+    return {"ok": True}
