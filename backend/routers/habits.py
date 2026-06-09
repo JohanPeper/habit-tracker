@@ -101,3 +101,17 @@ def delete_habit(habit_id: int, db: Session = Depends(get_db)):
     db.delete(habit)
     db.commit()
     return {"ok": True}
+    
+    # Обновить привычку (название, описание)
+@router.put("/{habit_id}", response_model=schemas.Habit)
+def update_habit(habit_id: int, habit_update: schemas.HabitUpdate, db: Session = Depends(get_db)):
+    habit = db.query(models.Habit).filter(models.Habit.id == habit_id).first()
+    if not habit:
+        raise HTTPException(status_code=404, detail="Habit not found")
+    if habit_update.title is not None:
+        habit.title = habit_update.title
+    if habit_update.description is not None:
+        habit.description = habit_update.description
+    db.commit()
+    db.refresh(habit)
+    return habit

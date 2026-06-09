@@ -10,9 +10,11 @@ function App() {
   const [habits, setHabits] = useState([]);
   const [newHabit, setNewHabit] = useState({ title: '', description: '' });
   const [selectedHabitForCalendar, setSelectedHabitForCalendar] = useState(null);
-  const [completionDates, setCompletionDates] = useState({}); // habit_id -> Set of dates
+  const [completionDates, setCompletionDates] = useState({});
+  const [editingHabitId, setEditingHabitId] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDesc, setEditDesc] = useState('');
 
-  // Загрузка пользователей
   useEffect(() => {
     axios.get(`${API}/users/`).then(res => setUsers(res.data));
   }, []);
@@ -33,13 +35,11 @@ function App() {
     }
   };
 
-  // Загрузка привычек пользователя (с их completions)
   useEffect(() => {
     if (user) {
       axios.get(`${API}/habits/`, { params: { user_id: user.id } })
         .then(res => {
           setHabits(res.data);
-          // Подготовим словарь завершённых дат
           const datesMap = {};
           res.data.forEach(habit => {
             if (habit.completions) {
@@ -53,7 +53,6 @@ function App() {
     }
   }, [user]);
 
-  // Добавление привычки
   const addHabit = async () => {
     if (!newHabit.title.trim()) return;
     try {
@@ -68,30 +67,23 @@ function App() {
     }
   };
 
-  // Отметить выполнение за конкретную дату
   const toggleCompletion = async (habitId, dateStr) => {
-    const dateObj = new Date(dateStr);
-    const isCompleted = completionDates[habitId]?.has(dateStr);
     try {
+      const isCompleted = completionDates[habitId]?.has(dateStr);
       if (isCompleted) {
         await axios.delete(`${API}/habits/${habitId}/complete`, { params: { completion_date: dateStr } });
       } else {
         await axios.post(`${API}/habits/${habitId}/complete`, null, { params: { completion_date: dateStr } });
       }
-      // Обновляем локально
       const newSet = new Set(completionDates[habitId]);
-      if (isCompleted) {
-        newSet.delete(dateStr);
-      } else {
-        newSet.add(dateStr);
-      }
+      if (isCompleted) newSet.delete(dateStr);
+      else newSet.add(dateStr);
       setCompletionDates({ ...completionDates, [habitId]: newSet });
     } catch (err) {
       alert('Ошибка: ' + err.response?.data?.detail || err.message);
     }
   };
 
-  // Удалить привычку
   const deleteHabit = async (habitId) => {
     if (!window.confirm('Удалить привычку?')) return;
     try {
@@ -105,7 +97,29 @@ function App() {
     }
   };
 
-  // Получить streak для привычки (считаем на основе completionDates)
+  const updateHabitDetails = async (habitId) => {
+    try {
+      const updates = {};
+      if (editTitle !== undefined) updates.title = editTitle;
+      if (editDesc !== undefined) updates.description = editDesc;
+      const res = await axios.put(`${API}/habits/${habitId}`, updates);
+      setHabits(habits.map(h => h.id === habitId ? res.data : h));
+      setEditingHabitId(null);
+    } catch (err) {
+      alert('Ошибка обновления: ' + err.response?.data?.detail || err.message);
+    }
+  };
+
+  const startEdit = (habit) => {
+    setEditingHabitId(habit.id);
+    setEditTitle(habit.title);
+    setEditDesc(habit.description || '');
+  };
+
+  const cancelEdit = () => {
+    setEditingHabitId(null);
+  };
+
   const calculateStreak = (habitId) => {
     const dates = Array.from(completionDates[habitId] || [])
       .map(d => new Date(d))
@@ -127,19 +141,34 @@ function App() {
     return streak;
   };
 
-  // Отметить сегодняшний день быстро
   const markToday = async (habitId) => {
     const todayStr = new Date().toISOString().slice(0,10);
     await toggleCompletion(habitId, todayStr);
   };
 
-  // Компонент календаря для выбранной привычки
+  // --- Расчёт процента выполнения за текущий месяц ---
+  const getMonthProgress = (habitId) => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    let completedCount = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = new Date(year, month, day).toISOString().slice(0,10);
+      if (completionDates[habitId]?.has(dateStr)) {
+        completedCount++;
+      }
+    }
+    const percent = daysInMonth === 0 ? 0 : (completedCount / daysInMonth) * 100;
+    return { completedCount, totalDays: daysInMonth, percent: Math.round(percent) };
+  };
+
   const Calendar = ({ habitId, onClose }) => {
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
     const firstDay = new Date(year, month, 1);
-    const startDay = firstDay.getDay(); // 0 - воскресенье
+    const startDay = firstDay.getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const daysArray = [];
     for (let i = 0; i < startDay; i++) daysArray.push(null);
@@ -147,7 +176,6 @@ function App() {
 
     const prevMonth = () => setCurrentMonth(new Date(year, month-1, 1));
     const nextMonth = () => setCurrentMonth(new Date(year, month+1, 1));
-
     const todayStr = new Date().toISOString().slice(0,10);
 
     return (
@@ -250,22 +278,77 @@ function App() {
         )}
         {habits.map(habit => {
           const streak = calculateStreak(habit.id);
+          const isEditing = editingHabitId === habit.id;
           return (
             <div key={habit.id} className="habit-card">
               <div className="habit-content" style={{ flex: 1 }}>
-                <div className="habit-title">{habit.title}</div>
-                {habit.description && <div className="habit-description">{habit.description}</div>}
-                <div style={{ fontSize: '0.8rem', color: '#4caf50', marginTop: 6 }}>🔥 Дней подряд: {streak}</div>
+                {isEditing ? (
+                  <div>
+                    <input
+                      value={editTitle}
+                      onChange={e => setEditTitle(e.target.value)}
+                      placeholder="Название"
+                      style={{ width: '100%', marginBottom: 8 }}
+                    />
+                    <input
+                      value={editDesc}
+                      onChange={e => setEditDesc(e.target.value)}
+                      placeholder="Описание"
+                      style={{ width: '100%', marginBottom: 8 }}
+                    />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => updateHabitDetails(habit.id)} style={{ background: '#4caf50', padding: '4px 12px' }}>💾 Сохранить</button>
+                      <button onClick={cancelEdit} style={{ background: '#9e9e9e', padding: '4px 12px' }}>❌ Отмена</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="habit-title">{habit.title}</div>
+                    {habit.description && <div className="habit-description">{habit.description}</div>}
+                    <div style={{ fontSize: '0.8rem', color: '#4caf50', marginTop: 6 }}>🔥 Дней подряд: {streak}</div>
+                  </>
+                )}
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => markToday(habit.id)} style={{ background: '#4caf50', padding: '6px 12px' }}>✅ Сегодня</button>
-                <button onClick={() => setSelectedHabitForCalendar(habit.id)} style={{ background: '#2196f3' }}>📅 Календарь</button>
-                <button onClick={() => deleteHabit(habit.id)} className="delete-btn">🗑</button>
-              </div>
+              {!isEditing && (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => startEdit(habit)} style={{ background: '#ff9800', padding: '6px 12px' }}>✏️</button>
+                  <button onClick={() => markToday(habit.id)} style={{ background: '#4caf50', padding: '6px 12px' }}>✅ Сегодня</button>
+                  <button onClick={() => setSelectedHabitForCalendar(habit.id)} style={{ background: '#2196f3' }}>📅</button>
+                  <button onClick={() => deleteHabit(habit.id)} className="delete-btn">🗑</button>
+                </div>
+              )}
             </div>
           );
         })}
       </div>
+
+      {/* Блок статистики за текущий месяц */}
+      {habits.length > 0 && (
+        <div style={{ marginTop: 40, padding: '20px', background: '#f1f5f9', borderRadius: 24 }}>
+          <h2>📊 Статистика за этот месяц</h2>
+          {habits.map(habit => {
+            const { completedCount, totalDays, percent } = getMonthProgress(habit.id);
+            return (
+              <div key={habit.id} style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <strong>{habit.title}</strong>
+                  <span>{completedCount} / {totalDays} ({percent}%)</span>
+                </div>
+                <div style={{ background: '#e2e8f0', borderRadius: 20, overflow: 'hidden' }}>
+                  <div style={{
+                    width: `${percent}%`,
+                    background: 'linear-gradient(90deg, #667eea, #764ba2)',
+                    height: '12px',
+                    borderRadius: 20,
+                    transition: 'width 0.3s'
+                  }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {selectedHabitForCalendar && (
         <Calendar habitId={selectedHabitForCalendar} onClose={() => setSelectedHabitForCalendar(null)} />
       )}
