@@ -1,5 +1,208 @@
-body {
+* {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-  background: #f5f7fa;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  padding: 20px;
+}
+
+/* Глобальные стили для карточек и контейнеров */
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 32px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1), 0 4px 12px rgba(0, 0, 0, 0.06);
+  padding: 32px 28px;
+  transition: all 0.2s ease;
+}
+
+/* Заголовки */
+h1, h2, h3 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+h1 {
+  font-size: 2rem;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-bottom: 0.25rem;
+}
+
+h2 {
+  font-size: 1.5rem;
+  color: #1e293b;
+  margin: 1.5rem 0 1rem;
+}
+
+h3 {
+  font-size: 1.25rem;
+  color: #334155;
+  margin-bottom: 1rem;
+}
+
+/* Кнопки */
+button {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  border: none;
+  padding: 10px 20px;
+  border-radius: 40px;
+  color: white;
+  font-weight: 500;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  filter: brightness(1.05);
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+/* Поля ввода */
+input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 28px;
+  font-size: 1rem;
+  transition: all 0.2s;
+  background: white;
+  outline: none;
+  font-family: inherit;
+}
+
+input:focus {
+  border-color: #764ba2;
+  box-shadow: 0 0 0 3px rgba(118, 75, 162, 0.2);
+}
+
+/* Карточка привычки */
+.habit-card {
+  background: white;
+  border-radius: 20px;
+  padding: 16px 20px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: all 0.2s;
+  border: 1px solid #f1f5f9;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+}
+
+.habit-card:hover {
+  transform: translateX(4px);
+  border-color: #e2e8f0;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+}
+
+/* Чекбокс */
+.habit-checkbox {
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  accent-color: #764ba2;
+  transform: scale(1.1);
+  transition: 0.1s;
+}
+
+.habit-checkbox:hover {
+  transform: scale(1.2);
+}
+
+/* Текст привычки */
+.habit-content {
+  flex: 1;
+}
+
+.habit-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+
+.habit-description {
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.completed .habit-title {
+  text-decoration: line-through;
+  color: #94a3b8;
+}
+.completed .habit-description {
+  text-decoration: line-through;
+  color: #cbd5e1;
+}
+
+/* Кнопка удалить */
+.delete-btn {
+  background: #fee2e2;
+  color: #dc2626;
+  padding: 6px 12px;
+  border-radius: 40px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.delete-btn:hover {
+  background: #fecaca;
+  transform: translateY(-1px);
+}
+
+/* Форма новой привычки */
+.form-group {
+  margin-bottom: 12px;
+}
+
+/* Анимация появления */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.habit-card {
+  animation: fadeInUp 0.2s ease forwards;
+}
+
+/* Адаптивность */
+@media (max-width: 640px) {
+  .container {
+    padding: 20px 16px;
+  }
+  .habit-card {
+    flex-wrap: wrap;
+    padding: 12px 16px;
+  }
+  .habit-content {
+    flex: 1 1 100%;
+    margin-bottom: 8px;
+  }
+  .delete-btn {
+    align-self: flex-end;
+  }
 }
