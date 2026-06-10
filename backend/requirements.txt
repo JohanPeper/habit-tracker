@@ -3,3 +3,6 @@ uvicorn
 sqlalchemy
 pydantic
 python-multipart
+asyncpg
+psycopg2-binary
+sqlalchemy

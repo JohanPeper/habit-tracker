@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-const API = 'http://localhost:8000';
+const API = 'https://habit-tracker-api.onrender.com';
 
 // Настройка axios: добавляем токен в заголовки, если он есть
 axios.interceptors.request.use(config => {
